@@ -16,8 +16,6 @@ let package = Package(
         .library(
             name: "CompArch",
             targets: ["CompArch"]),
-        .library(name: "CompArchTestSupport",
-                 targets: ["CompArchTestSupport"])
     ],
     dependencies: [
         .package(url: "https://github.com/pointfreeco/swift-case-paths", from: "0.1.0"),
@@ -28,9 +26,6 @@ let package = Package(
         .target(
             name: "CompArch",
             dependencies: ["CasePaths"]),
-        .target(
-            name: "CompArchTestSupport",
-            dependencies: ["CompArch"]),
         .testTarget(
             name: "CompArchTests",
             dependencies: ["CompArch"]),

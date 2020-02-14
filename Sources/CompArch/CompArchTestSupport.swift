@@ -27,12 +27,20 @@ public struct Step<Value, Action> {
         self.file = file
         self.line = line
     }
+
+    public static func send(_ action: Action, update: @escaping (inout Value) -> Void, file: StaticString = #file, line: UInt = #line) -> Step {
+        Step(.send, action, file: file, line: line, update)
+    }
+
+    public static func receive(_ action: Action, update: @escaping (inout Value) -> Void, file: StaticString = #file, line: UInt = #line) -> Step {
+        Step(.receive, action, file: file, line: line, update)
+    }
 }
 
 public func assert<Value: Equatable, Action: Equatable>(
     initialValue: Value,
     reducer: Reducer<Value, Action>,
-    steps: Step<Value, Action>...,
+    steps: [Step<Value, Action>],
     file: StaticString = #file,
     line: UInt = #line
 ) {
