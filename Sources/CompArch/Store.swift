@@ -91,6 +91,22 @@ public func pullback<GlobalValue, LocalValue, GlobalAction, LocalAction>(
 }
 
 
+public func pullback<GlobalValue, LocalValue, GlobalAction, LocalAction>(
+  _ reducer: @escaping Reducer<LocalValue, LocalAction>,
+  value: WritableKeyPath<GlobalValue, LocalValue>,
+  action: CasePath<GlobalAction, LocalAction>
+) -> Reducer<GlobalValue, GlobalAction> {
+
+    return { globalValue, globalAction in
+        guard let localAction = action.extract(from: globalAction) else { return [] }
+        let localEffects = reducer(&globalValue[keyPath: value], localAction)
+        return localEffects.map {
+            $0.map(action.embed).eraseToEffect()
+        }
+    }
+}
+
+
 public func logging<Value, Action>(_ reducer: @escaping Reducer<Value, Action>) -> Reducer<Value, Action> {
     return { value, action in
         let effects = reducer(&value, action)
@@ -120,16 +136,16 @@ public struct Indexed<Value> {
 
 public func indexed<State, Action, GlobalState, GlobalAction>(
     reducer: @escaping Reducer<State, Action>,
-    _ stateKeyPath: WritableKeyPath<GlobalState, [State]>,
-    _ actionKeyPath: CasePath<GlobalAction, Indexed<Action>>
+    _ value: WritableKeyPath<GlobalState, [State]>,
+    _ action: CasePath<GlobalAction, Indexed<Action>>
 ) -> Reducer<GlobalState, GlobalAction> {
     return { globalValue, globalAction in
-        guard let localAction = actionKeyPath.extract(from: globalAction) else { return [] }
+        guard let localAction = action.extract(from: globalAction) else { return [] }
         let index = localAction.index
-        let localEffects = reducer(&globalValue[keyPath: stateKeyPath][index], localAction.value)
+        let localEffects = reducer(&globalValue[keyPath: value][index], localAction.value)
         return localEffects.map { localEffect in
             localEffect.map { localAction in
-                actionKeyPath.embed(Indexed(index: index, value: localAction))
+                action.embed(Indexed(index: index, value: localAction))
             }.eraseToEffect()
         }
     }
@@ -149,17 +165,17 @@ public struct Identified<Value: Identifiable, Action> {
 
 public func identified<State: Identifiable, Action, GlobalState, GlobalAction>(
     reducer: @escaping Reducer<State, Action>,
-    _ stateKeyPath: WritableKeyPath<GlobalState, [State]>,
-    _ actionKeyPath: CasePath<GlobalAction, Identified<State, Action>>
+    _ value: WritableKeyPath<GlobalState, [State]>,
+    _ action: CasePath<GlobalAction, Identified<State, Action>>
 ) -> Reducer<GlobalState, GlobalAction> {
     return { globalValue, globalAction in
-        guard let localAction = actionKeyPath.extract(from: globalAction) else { return [] }
+        guard let localAction = action.extract(from: globalAction) else { return [] }
         let id = localAction.id
-        guard let index = globalValue[keyPath: stateKeyPath].firstIndex(where: { $0.id == id }) else { return [] }
-        let localEffects = reducer(&globalValue[keyPath: stateKeyPath][index], localAction.action)
+        guard let index = globalValue[keyPath: value].firstIndex(where: { $0.id == id }) else { return [] }
+        let localEffects = reducer(&globalValue[keyPath: value][index], localAction.action)
         return localEffects.map { localEffect in
             localEffect.map { localAction in
-                actionKeyPath.embed(Identified(id: id, action: localAction))
+                action.embed(Identified(id: id, action: localAction))
             }.eraseToEffect()
         }
     }
