@@ -123,15 +123,7 @@ public func logging<Value, Action>(_ reducer: @escaping Reducer<Value, Action>) 
 
 // See https://github.com/pointfreeco/episode-code-samples/issues/33 for details
 
-public struct Indexed<Action> {
-    public var index: Int
-    public var action: Action
-
-    public init(index: Int, action: Action) {
-        self.index = index
-        self.action = action
-    }
-}
+public typealias Indexed<Action> = (index: Int, action: Action)
 
 
 public func indexed<State, Action, GlobalState, GlobalAction>(
@@ -152,15 +144,7 @@ public func indexed<State, Action, GlobalState, GlobalAction>(
 }
 
 
-public struct Identified<Value: Identifiable, Action> {
-    public var id: Value.ID
-    public var action: Action
-
-    public init(id: Value.ID, action: Action) {
-        self.id = id
-        self.action = action
-    }
-}
+public typealias Identified<Value: Identifiable, Action> = (id: Value.ID, action: Action)
 
 
 public func identified<State: Identifiable, Action, GlobalState, GlobalAction>(
@@ -175,7 +159,7 @@ public func identified<State: Identifiable, Action, GlobalState, GlobalAction>(
         let localEffects = reducer(&globalValue[keyPath: value][index], localAction.action)
         return localEffects.map { localEffect in
             localEffect.map { localAction in
-                action.embed(Identified(id: id, action: localAction))
+                action.embed(Identified<State, Action>(id: id, action: localAction))
             }.eraseToEffect()
         }
     }
