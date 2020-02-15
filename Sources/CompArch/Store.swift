@@ -123,13 +123,13 @@ public func logging<Value, Action>(_ reducer: @escaping Reducer<Value, Action>) 
 
 // See https://github.com/pointfreeco/episode-code-samples/issues/33 for details
 
-public struct Indexed<Value> {
+public struct Indexed<Action> {
     public var index: Int
-    public var value: Value
+    public var action: Action
 
-    public init(index: Int, value: Value) {
+    public init(index: Int, action: Action) {
         self.index = index
-        self.value = value
+        self.action = action
     }
 }
 
@@ -142,10 +142,10 @@ public func indexed<State, Action, GlobalState, GlobalAction>(
     return { globalValue, globalAction in
         guard let localAction = action.extract(from: globalAction) else { return [] }
         let index = localAction.index
-        let localEffects = reducer(&globalValue[keyPath: value][index], localAction.value)
+        let localEffects = reducer(&globalValue[keyPath: value][index], localAction.action)
         return localEffects.map { localEffect in
             localEffect.map { localAction in
-                action.embed(Indexed(index: index, value: localAction))
+                action.embed(Indexed(index: index, action: localAction))
             }.eraseToEffect()
         }
     }
