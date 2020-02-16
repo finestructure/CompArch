@@ -38,9 +38,9 @@ final class CompArchTests: XCTestCase {
     func test_matchingIdentified() {
         let reducer: Reducer<IdentifiedParent.State, IdentifiedParent.Action> = { state, action in
             switch action {
-                case let .child((index, .childAction1)):
+                case let .child((id, .childAction1)):
                     return [
-                        Just(.childAction(index))
+                        Just(.childAction(id))
                             .eraseToEffect()
                 ]
                 case .child(_):
@@ -88,7 +88,7 @@ struct IdentifiedParent {
 
     enum Action {
         case child(Identified<Child.State, Child.Action>)
-        case childAction(Int)
+        case childAction(Child.State.ID)
     }
 }
 
