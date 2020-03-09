@@ -27,7 +27,7 @@ extension Publisher where Output == Never, Failure == Never {
 
 
 extension Publisher {
-    func cancellable<Id: Hashable>(id: Id) -> AnyPublisher<Output, Failure> {
+    public func cancellable<Id: Hashable>(id: Id) -> AnyPublisher<Output, Failure> {
         return Deferred { () -> PassthroughSubject<Output, Failure> in
             cancellables[id]?.cancel()
             let subject = PassthroughSubject<Output, Failure>()
