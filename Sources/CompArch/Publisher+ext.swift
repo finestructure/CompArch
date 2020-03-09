@@ -24,3 +24,25 @@ extension Publisher where Output == Never, Failure == Never {
     return self.map(absurd).eraseToEffect()
   }
 }
+
+
+extension Publisher {
+    func cancellable<Id: Hashable>(id: Id) -> AnyPublisher<Output, Failure> {
+        return Deferred { () -> PassthroughSubject<Output, Failure> in
+            cancellables[id]?.cancel()
+            let subject = PassthroughSubject<Output, Failure>()
+                cancellables[id] = self.subscribe(subject)
+                return subject
+            }
+            .eraseToAnyPublisher()
+        }
+
+    public static func cancel<Id: Hashable>(id: Id) -> Effect<Output> {
+        .fireAndForget {
+            cancellables[id]?.cancel()
+        }
+    }
+}
+
+
+private var cancellables: [AnyHashable: AnyCancellable] = [:]
