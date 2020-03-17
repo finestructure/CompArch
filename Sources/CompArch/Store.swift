@@ -166,3 +166,17 @@ public func identified<State: Identifiable, Action, GlobalState, GlobalAction>(
 }
 
 
+// Moritz Lang:
+// https://github.com/pointfreeco/episode-code-samples/issues/33#issuecomment-599794433
+extension Store {
+    public func view<LocalValue: Identifiable, LocalAction>(
+        _ array: WritableKeyPath<Value, [LocalValue]>,
+        id: LocalValue.ID,
+        action: CasePath<Action, Identified<LocalValue, LocalAction>>
+    ) -> Store<LocalValue, LocalAction> {
+        view(
+            value: { (value: Value) in value[keyPath: array].first(where: { $0.id == id })! },
+            action: { action.embed((id, action: $0)) }
+        )
+    }
+}
