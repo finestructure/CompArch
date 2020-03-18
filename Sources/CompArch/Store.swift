@@ -180,3 +180,44 @@ extension Store {
         )
     }
 }
+
+
+// Peter Kovacs
+// https://github.com/pointfreeco/episode-code-samples/issues/33#issuecomment-600072995
+extension Store {
+    public func view<LocalValue, LocalAction>(
+        index: Int,
+        value: WritableKeyPath<Value, [LocalValue]>,
+        action: CasePath<Action, (Int, LocalValue.ID, LocalAction)>
+    ) -> Store<LocalValue, LocalAction> where LocalValue: Identifiable {
+        var index = index
+        let localStore =
+            Store<LocalValue, LocalAction>(
+                initialValue: self.value[keyPath: value][index],
+                reducer: { (localValue, localAction) -> [Effect<LocalAction>] in
+                    let values = self.value[keyPath: value]
+                    if !values.indices.contains(index) || localValue.id != values[index].id {
+                        guard let newIndex = values.firstIndex(where: { localValue.id == $0.id}) else { return [] }
+                        index = newIndex
+                    }
+                    let globalAction = action.embed((index, localValue.id, localAction))
+
+                    self.send(globalAction)
+                    localValue = self.value[keyPath: value][index]
+                    return []
+            }
+        )
+
+        localStore.viewCancellable = self.$value.sink(receiveValue: { [weak localStore] newValue in
+            let values = newValue[keyPath: value]
+            if !values.indices.contains(index) || localStore?.value.id != values[index].id {
+                guard let newIndex = values.firstIndex(where: { localStore?.value.id == $0.id }) else { return }
+                index = newIndex
+            }
+
+            localStore?.value = newValue[keyPath: value][index]
+        })
+
+        return localStore
+    }
+}
