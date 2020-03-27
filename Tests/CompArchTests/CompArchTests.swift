@@ -5,7 +5,7 @@ import XCTest
 
 final class CompArchTests: XCTestCase {
     func test_matchingIndexed() {
-        let reducer: Reducer<IndexedParent.State, IndexedParent.Action> = { state, action in
+        let reducer: Reducer<IndexedParent.State, IndexedParent.Action, Void> = { state, action, _ in
             switch action {
                 case let .child((index, .childAction1)):
                     return [
@@ -19,7 +19,7 @@ final class CompArchTests: XCTestCase {
             }
         }
         var parent = IndexedParent.State(parentProp: 0)
-        let effects = reducer(&parent, .child(Indexed(1, .childAction1)))
+        let effects = reducer(&parent, .child(Indexed(1, .childAction1)), ())
         XCTAssertEqual(effects.count, 1)
 
         let exp = expectation(description: "exp")
@@ -36,7 +36,7 @@ final class CompArchTests: XCTestCase {
     }
 
     func test_matchingIdentified() {
-        let reducer: Reducer<IdentifiedParent.State, IdentifiedParent.Action> = { state, action in
+        let reducer: Reducer<IdentifiedParent.State, IdentifiedParent.Action, Void> = { state, action, _ in
             switch action {
                 case let .child((id, .childAction1)):
                     return [
@@ -51,7 +51,7 @@ final class CompArchTests: XCTestCase {
         }
         var parent = IdentifiedParent.State(parentProp: 0)
         let action = Identified<Child.State, Child.Action>(id: 1, action: .childAction1)
-        let effects = reducer(&parent, .child(action))
+        let effects = reducer(&parent, .child(action), ())
         XCTAssertEqual(effects.count, 1)
 
         let exp = expectation(description: "exp")

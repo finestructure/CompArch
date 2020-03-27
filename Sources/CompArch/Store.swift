@@ -10,22 +10,28 @@ import CasePaths
 import Combine
 
 
-public typealias Reducer<Value, Action> = (inout Value, Action) -> [Effect<Action>]
+public typealias Reducer<Value, Action, Environment> = (inout Value, Action, Environment) -> [Effect<Action>]
 
 
 public final class Store<Value, Action>: ObservableObject {
     @Published public private(set) var value: Value
-    private let reducer: Reducer<Value, Action>
+    private let reducer: Reducer<Value, Action, Any>
+    let environment: Any
     private var viewCancellable: Cancellable?
     private var effectCancellables: Set<AnyCancellable> = []
 
-    public init(initialValue: Value, reducer: @escaping Reducer<Value, Action>) {
+    public init<Environment>(initialValue: Value,
+                reducer: @escaping Reducer<Value, Action, Environment>,
+                environment: Environment) {
         self.value = initialValue
-        self.reducer = reducer
+        self.reducer = { value, action, environment in
+            reducer(&value, action, environment as! Environment)
+        }
+        self.environment = environment
     }
 
     public func send(_ action: Action) {
-        let effects = reducer(&value, action)
+        let effects = reducer(&value, action, environment)
         effects.forEach { effect in
             var effectCancellable: AnyCancellable?
             var didComplete = false
@@ -49,11 +55,12 @@ public final class Store<Value, Action>: ObservableObject {
     ) -> Store<LocalValue, LocalAction> {
         let localStore = Store<LocalValue, LocalAction>(
             initialValue: toLocalValue(self.value),
-            reducer: { localValue, localAction in
+            reducer: { localValue, localAction, _ in
                 self.send(toGlobalAction(localAction))
                 localValue = toLocalValue(self.value)
                 return []
-        }
+        },
+            environment: self.environment
         )
         localStore.viewCancellable = self.$value.sink { [weak localStore] newValue in
             localStore?.value = toLocalValue(newValue)
@@ -63,23 +70,26 @@ public final class Store<Value, Action>: ObservableObject {
 }
 
 
-public func combine<Value, Action>(_ reducers: Reducer<Value, Action>...) -> Reducer<Value, Action> {
-    return { value, action in
-        let effects = reducers.flatMap { $0(&value, action) }
+public func combine<Value, Action, Environment>(_ reducers: Reducer<Value, Action, Environment>...)
+    -> Reducer<Value, Action, Environment> {
+
+    return { value, action, environment in
+        let effects = reducers.flatMap { $0(&value, action, environment) }
         return effects
     }
 }
 
 
-public func pullback<GlobalValue, LocalValue, GlobalAction, LocalAction>(
-  _ reducer: @escaping Reducer<LocalValue, LocalAction>,
+public func pullback<GlobalValue, LocalValue, GlobalAction, LocalAction, LocalEnvironment, GlobalEnvironment>(
+  _ reducer: @escaping Reducer<LocalValue, LocalAction, LocalEnvironment>,
   value: WritableKeyPath<GlobalValue, LocalValue>,
-  action: WritableKeyPath<GlobalAction, LocalAction?>
-) -> Reducer<GlobalValue, GlobalAction> {
+  action: WritableKeyPath<GlobalAction, LocalAction?>,
+  environment: @escaping (GlobalEnvironment) -> LocalEnvironment
+) -> Reducer<GlobalValue, GlobalAction, GlobalEnvironment> {
 
-    return { globalValue, globalAction in
+    return { globalValue, globalAction, globalEnvironment in
         guard let localAction = globalAction[keyPath: action] else { return [] }
-        let localEffects = reducer(&globalValue[keyPath: value], localAction)
+        let localEffects = reducer(&globalValue[keyPath: value], localAction, environment(globalEnvironment))
         return localEffects.map { localEffect in
             localEffect.map { localAction -> GlobalAction in
                 var globalAction = globalAction
@@ -91,15 +101,16 @@ public func pullback<GlobalValue, LocalValue, GlobalAction, LocalAction>(
 }
 
 
-public func pullback<GlobalValue, LocalValue, GlobalAction, LocalAction>(
-  _ reducer: @escaping Reducer<LocalValue, LocalAction>,
+public func pullback<GlobalValue, LocalValue, GlobalAction, LocalAction, LocalEnvironment, GlobalEnvironment>(
+  _ reducer: @escaping Reducer<LocalValue, LocalAction, LocalEnvironment>,
   value: WritableKeyPath<GlobalValue, LocalValue>,
-  action: CasePath<GlobalAction, LocalAction>
-) -> Reducer<GlobalValue, GlobalAction> {
+  action: CasePath<GlobalAction, LocalAction>,
+  environment: @escaping (GlobalEnvironment) -> LocalEnvironment
+) -> Reducer<GlobalValue, GlobalAction, GlobalEnvironment> {
 
-    return { globalValue, globalAction in
+    return { globalValue, globalAction, globalEnvironment in
         guard let localAction = action.extract(from: globalAction) else { return [] }
-        let localEffects = reducer(&globalValue[keyPath: value], localAction)
+        let localEffects = reducer(&globalValue[keyPath: value], localAction, environment(globalEnvironment))
         return localEffects.map {
             $0.map(action.embed).eraseToEffect()
         }
@@ -107,9 +118,11 @@ public func pullback<GlobalValue, LocalValue, GlobalAction, LocalAction>(
 }
 
 
-public func logging<Value, Action>(_ reducer: @escaping Reducer<Value, Action>) -> Reducer<Value, Action> {
-    return { value, action in
-        let effects = reducer(&value, action)
+public func logging<Value, Action, Environment>(_ reducer: @escaping Reducer<Value, Action, Environment>)
+    -> Reducer<Value, Action, Environment> {
+
+        return { value, action, environment in
+        let effects = reducer(&value, action, environment)
         let newValue = value
         return [.fireAndForget {
             print("Action: \(action)")
@@ -126,15 +139,16 @@ public func logging<Value, Action>(_ reducer: @escaping Reducer<Value, Action>) 
 public typealias Indexed<Action> = (index: Int, action: Action)
 
 
-public func indexed<State, Action, GlobalState, GlobalAction>(
-    reducer: @escaping Reducer<State, Action>,
+public func indexed<State, Action, Environment, GlobalState, GlobalAction, GlobalEnvironment>(
+    reducer: @escaping Reducer<State, Action, Environment>,
     _ value: WritableKeyPath<GlobalState, [State]>,
-    _ action: CasePath<GlobalAction, Indexed<Action>>
-) -> Reducer<GlobalState, GlobalAction> {
-    return { globalValue, globalAction in
+    _ action: CasePath<GlobalAction, Indexed<Action>>,
+    _ environment: @escaping (GlobalEnvironment) -> Environment
+) -> Reducer<GlobalState, GlobalAction, GlobalEnvironment> {
+    return { globalValue, globalAction, globalEnvironment in
         guard let localAction = action.extract(from: globalAction) else { return [] }
         let index = localAction.index
-        let localEffects = reducer(&globalValue[keyPath: value][index], localAction.action)
+        let localEffects = reducer(&globalValue[keyPath: value][index], localAction.action, environment(globalEnvironment))
         return localEffects.map { localEffect in
             localEffect.map { localAction in
                 action.embed(Indexed(index: index, action: localAction))
@@ -147,16 +161,17 @@ public func indexed<State, Action, GlobalState, GlobalAction>(
 public typealias Identified<Value: Identifiable, Action> = (id: Value.ID, action: Action)
 
 
-public func identified<State: Identifiable, Action, GlobalState, GlobalAction>(
-    reducer: @escaping Reducer<State, Action>,
+public func identified<State: Identifiable, Action, Environment, GlobalState, GlobalAction, GlobalEnvironment>(
+    reducer: @escaping Reducer<State, Action, Environment>,
     _ value: WritableKeyPath<GlobalState, [State]>,
-    _ action: CasePath<GlobalAction, Identified<State, Action>>
-) -> Reducer<GlobalState, GlobalAction> {
-    return { globalValue, globalAction in
+    _ action: CasePath<GlobalAction, Identified<State, Action>>,
+    _ environment: @escaping (GlobalEnvironment) -> Environment
+) -> Reducer<GlobalState, GlobalAction, GlobalEnvironment> {
+    return { globalValue, globalAction, globalEnvironment in
         guard let localAction = action.extract(from: globalAction) else { return [] }
         let id = localAction.id
         guard let index = globalValue[keyPath: value].firstIndex(where: { $0.id == id }) else { return [] }
-        let localEffects = reducer(&globalValue[keyPath: value][index], localAction.action)
+        let localEffects = reducer(&globalValue[keyPath: value][index], localAction.action, environment(globalEnvironment))
         return localEffects.map { localEffect in
             localEffect.map { localAction in
                 action.embed(Identified<State, Action>(id: id, action: localAction))
